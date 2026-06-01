@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">sep</div>
+      <div id="unity-build-title">Plexa v1</div>
     </div>
   </div>
   <script>
@@ -56,6 +56,10 @@
     window.hrirAudioContext = null;
     window.hrirTable = null;
     window.hrirAzimuth = 0;
+
+    window.hrirNextTime = 0;
+    window.hrirSampleRate = 48000;
+    window.hrirIrCache = {};
 
     window.hrirInit = async function () {
       if (window.hrirAudioContext) return;
@@ -93,6 +97,7 @@
       await window.hrirInit();
 
       const ctx = window.hrirAudioContext;
+
       if (ctx.state !== "running") {
         await ctx.resume();
       }
@@ -101,8 +106,9 @@
       if (!hrir) return;
 
       const monoLength = Math.floor(pcm.length / channels);
-      const mono = ctx.createBuffer(1, monoLength, 48000);
-      const monoData = mono.getChannelData(0);
+
+      const monoBuffer = ctx.createBuffer(1, monoLength, window.hrirSampleRate);
+      const monoData = monoBuffer.getChannelData(0);
 
       for (let i = 0; i < monoLength; i++) {
         let s = 0;
@@ -112,20 +118,29 @@
         monoData[i] = s / channels;
       }
 
+      const key = String(hrir.azimuth);
+
+      if (!window.hrirIrCache[key]) {
+        const leftIR = ctx.createBuffer(1, hrir.left.length, window.hrirSampleRate);
+        const rightIR = ctx.createBuffer(1, hrir.right.length, window.hrirSampleRate);
+
+        leftIR.getChannelData(0).set(hrir.left);
+        rightIR.getChannelData(0).set(hrir.right);
+
+        window.hrirIrCache[key] = {
+          left: leftIR,
+          right: rightIR
+        };
+      }
+
       const source = ctx.createBufferSource();
-      source.buffer = mono;
+      source.buffer = monoBuffer;
 
       const leftConv = ctx.createConvolver();
       const rightConv = ctx.createConvolver();
 
-      const leftIR = ctx.createBuffer(1, hrir.left.length, 48000);
-      const rightIR = ctx.createBuffer(1, hrir.right.length, 48000);
-
-      leftIR.getChannelData(0).set(hrir.left);
-      rightIR.getChannelData(0).set(hrir.right);
-
-      leftConv.buffer = leftIR;
-      rightConv.buffer = rightIR;
+      leftConv.buffer = window.hrirIrCache[key].left;
+      rightConv.buffer = window.hrirIrCache[key].right;
 
       const merger = ctx.createChannelMerger(2);
 
@@ -137,7 +152,15 @@
 
       merger.connect(ctx.destination);
 
-      source.start();
+      const now = ctx.currentTime;
+
+      if (window.hrirNextTime < now + 0.02) {
+        window.hrirNextTime = now + 0.02;
+      }
+
+      source.start(window.hrirNextTime);
+
+      window.hrirNextTime += monoLength / window.hrirSampleRate;
     };
 
     var buildUrl = "Build";
@@ -149,7 +172,7 @@
       codeUrl: buildUrl + "/plexanb.wasm",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "ichicawa",
-      productName: "Plexa v1",
+      productName: "sep",
       productVersion: "1.0",
       showBanner: unityShowBanner,
     };
