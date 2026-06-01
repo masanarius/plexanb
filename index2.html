@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v7</div>
+      <div id="unity-build-title">Plexa v8</div>
     </div>
   </div>
 
@@ -84,6 +84,7 @@
 
     window.HRIR_SetAzimuth = function (azimuth) {
       window.currentAzimuth = azimuth;
+      console.log("JS HRIR_SetAzimuth:", azimuth);
     };
 
     window.HRIR_SetVolume = function (volume) {
@@ -169,6 +170,12 @@
       if (!hrir) {
         return;
       }
+
+      console.log(
+        "JS selected HRIR:",
+        "currentAzimuth=", window.currentAzimuth,
+        "nearest=", hrir.azimuth
+      );
 
       const monoLength = Math.floor(pcm.length / channels);
       const buffer = ctx.createBuffer(1, monoLength, sampleRate);
