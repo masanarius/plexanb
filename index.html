@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <title>Unity Web Player | sep</title>
+  <title>Plexa</title>
   <link rel="shortcut icon" href="TemplateData/favicon.ico">
   <link rel="stylesheet" href="TemplateData/style.css">
 </head>
@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v5</div>
+      <div id="unity-build-title">Plexa v6</div>
     </div>
   </div>
 
@@ -31,7 +31,6 @@
 
     function unityShowBanner(msg, type) {
       var warningBanner = document.querySelector("#unity-warning");
-
       function updateBannerVisibility() {
         warningBanner.style.display =
           warningBanner.children.length ? "block" : "none";
@@ -47,7 +46,6 @@
         if (type == "warning") {
           div.style = "background: yellow; padding: 10px;";
         }
-
         setTimeout(function () {
           warningBanner.removeChild(div);
           updateBannerVisibility();
@@ -65,6 +63,9 @@
     window.hrirNextTime = 0;
     window.currentAzimuth = 0;
     window.hrirVolume = 0;
+    window.hrirLowPassFrequency = 22000;
+    window.hrirTable = null;
+    window.hrirIrCache = {};
 
     window.hrirInit = async function () {
       if (window.hrirAudioContext) {
@@ -74,7 +75,11 @@
       window.hrirAudioContext =
         new (window.AudioContext || window.webkitAudioContext)();
 
+      const res = await fetch("StreamingAssets/Avg83_DH_Unity.json");
+      window.hrirTable = await res.json();
+
       console.log("HRIR AudioContext initialized");
+      console.log("HRIR JS loaded:", window.hrirTable.entries.length);
     };
 
     window.HRIR_SetAzimuth = function (azimuth) {
@@ -83,8 +88,52 @@
 
     window.HRIR_SetVolume = function (volume) {
       window.hrirVolume = volume;
-      console.log("HRIR volume set:", volume);
     };
+
+    window.HRIR_SetLowPass = function (frequency) {
+      window.hrirLowPassFrequency = frequency;
+    };
+
+    function nearestHrir(azimuth) {
+      if (!window.hrirTable) {
+        return null;
+      }
+
+      let best = null;
+      let bestDiff = Infinity;
+
+      for (const e of window.hrirTable.entries) {
+        const diff = Math.abs(((azimuth - e.azimuth + 540) % 360) - 180);
+
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = e;
+        }
+      }
+
+      return best;
+    }
+
+    function getCachedIr(ctx, hrir, sampleRate) {
+      const key = String(hrir.azimuth) + "_" + sampleRate;
+
+      if (window.hrirIrCache[key]) {
+        return window.hrirIrCache[key];
+      }
+
+      const leftIR = ctx.createBuffer(1, hrir.left.length, sampleRate);
+      const rightIR = ctx.createBuffer(1, hrir.right.length, sampleRate);
+
+      leftIR.getChannelData(0).set(hrir.left);
+      rightIR.getChannelData(0).set(hrir.right);
+
+      window.hrirIrCache[key] = {
+        left: leftIR,
+        right: rightIR
+      };
+
+      return window.hrirIrCache[key];
+    }
 
     window.HRIR_SendPcm = async function (pcm, channels, sampleRate) {
       if (window.hrirVolume <= 0.0001) {
@@ -99,14 +148,13 @@
         await ctx.resume();
       }
 
+      const hrir = nearestHrir(window.currentAzimuth);
+      if (!hrir) {
+        return;
+      }
+
       const monoLength = Math.floor(pcm.length / channels);
-
-      const buffer = ctx.createBuffer(
-        1,
-        monoLength,
-        sampleRate
-      );
-
+      const buffer = ctx.createBuffer(1, monoLength, sampleRate);
       const data = buffer.getChannelData(0);
 
       for (let i = 0; i < monoLength; i++) {
@@ -122,10 +170,32 @@
       const source = ctx.createBufferSource();
       source.buffer = buffer;
 
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = window.hrirLowPassFrequency;
+
+      const ir = getCachedIr(ctx, hrir, sampleRate);
+
+      const leftConv = ctx.createConvolver();
+      const rightConv = ctx.createConvolver();
+
+      leftConv.buffer = ir.left;
+      rightConv.buffer = ir.right;
+
+      const merger = ctx.createChannelMerger(2);
+
       const gain = ctx.createGain();
       gain.gain.value = window.hrirVolume;
 
-      source.connect(gain);
+      source.connect(lowpass);
+
+      lowpass.connect(leftConv);
+      lowpass.connect(rightConv);
+
+      leftConv.connect(merger, 0, 0);
+      rightConv.connect(merger, 0, 1);
+
+      merger.connect(gain);
       gain.connect(ctx.destination);
 
       const now = ctx.currentTime;
@@ -135,7 +205,6 @@
       }
 
       source.start(window.hrirNextTime);
-
       window.hrirNextTime += monoLength / sampleRate;
     };
 
