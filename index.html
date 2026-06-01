@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v1</div>
+      <div id="unity-build-title">Plexa v2</div>
     </div>
   </div>
   <script>
@@ -93,74 +93,39 @@
       return best;
     }
 
+    window.hrirNextTime = 0;
+
     window.HRIR_SendPcm = async function (pcm, channels) {
       await window.hrirInit();
 
       const ctx = window.hrirAudioContext;
-
       if (ctx.state !== "running") {
         await ctx.resume();
       }
 
-      const hrir = nearestHrir(window.hrirAzimuth);
-      if (!hrir) return;
-
       const monoLength = Math.floor(pcm.length / channels);
-
-      const monoBuffer = ctx.createBuffer(1, monoLength, window.hrirSampleRate);
-      const monoData = monoBuffer.getChannelData(0);
+      const buffer = ctx.createBuffer(1, monoLength, 48000);
+      const data = buffer.getChannelData(0);
 
       for (let i = 0; i < monoLength; i++) {
         let s = 0;
         for (let c = 0; c < channels; c++) {
           s += pcm[i * channels + c];
         }
-        monoData[i] = s / channels;
-      }
-
-      const key = String(hrir.azimuth);
-
-      if (!window.hrirIrCache[key]) {
-        const leftIR = ctx.createBuffer(1, hrir.left.length, window.hrirSampleRate);
-        const rightIR = ctx.createBuffer(1, hrir.right.length, window.hrirSampleRate);
-
-        leftIR.getChannelData(0).set(hrir.left);
-        rightIR.getChannelData(0).set(hrir.right);
-
-        window.hrirIrCache[key] = {
-          left: leftIR,
-          right: rightIR
-        };
+        data[i] = s / channels;
       }
 
       const source = ctx.createBufferSource();
-      source.buffer = monoBuffer;
-
-      const leftConv = ctx.createConvolver();
-      const rightConv = ctx.createConvolver();
-
-      leftConv.buffer = window.hrirIrCache[key].left;
-      rightConv.buffer = window.hrirIrCache[key].right;
-
-      const merger = ctx.createChannelMerger(2);
-
-      source.connect(leftConv);
-      source.connect(rightConv);
-
-      leftConv.connect(merger, 0, 0);
-      rightConv.connect(merger, 0, 1);
-
-      merger.connect(ctx.destination);
+      source.buffer = buffer;
+      source.connect(ctx.destination);
 
       const now = ctx.currentTime;
-
-      if (window.hrirNextTime < now + 0.02) {
-        window.hrirNextTime = now + 0.02;
+      if (window.hrirNextTime < now + 0.08) {
+        window.hrirNextTime = now + 0.08;
       }
 
       source.start(window.hrirNextTime);
-
-      window.hrirNextTime += monoLength / window.hrirSampleRate;
+      window.hrirNextTime += monoLength / 48000;
     };
 
     var buildUrl = "Build";
