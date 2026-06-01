@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v6</div>
+      <div id="unity-build-title">Plexa v7</div>
     </div>
   </div>
 
@@ -114,15 +114,32 @@
       return best;
     }
 
-    function getCachedIr(ctx, hrir, sampleRate) {
-      const key = String(hrir.azimuth) + "_" + sampleRate;
+    function getCachedIr(ctx, hrir) {
+
+      const contextRate = ctx.sampleRate;
+
+      const key =
+        String(hrir.azimuth) +
+        "_" +
+        contextRate;
 
       if (window.hrirIrCache[key]) {
         return window.hrirIrCache[key];
       }
 
-      const leftIR = ctx.createBuffer(1, hrir.left.length, sampleRate);
-      const rightIR = ctx.createBuffer(1, hrir.right.length, sampleRate);
+      const leftIR =
+        ctx.createBuffer(
+          1,
+          hrir.left.length,
+          contextRate
+        );
+
+      const rightIR =
+        ctx.createBuffer(
+          1,
+          hrir.right.length,
+          contextRate
+        );
 
       leftIR.getChannelData(0).set(hrir.left);
       rightIR.getChannelData(0).set(hrir.right);
@@ -174,7 +191,7 @@
       lowpass.type = "lowpass";
       lowpass.frequency.value = window.hrirLowPassFrequency;
 
-      const ir = getCachedIr(ctx, hrir, sampleRate);
+      const ir = getCachedIr(ctx, hrir);
 
       const leftConv = ctx.createConvolver();
       const rightConv = ctx.createConvolver();
