@@ -22,7 +22,7 @@
     <div id="unity-footer">
       <div id="unity-logo-title-footer"></div>
       <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v2</div>
+      <div id="unity-build-title">Plexa v3</div>
     </div>
   </div>
   <script>
@@ -52,81 +52,6 @@
       }
       updateBannerVisibility();
     }
-
-    window.hrirAudioContext = null;
-    window.hrirTable = null;
-    window.hrirAzimuth = 0;
-
-    window.hrirNextTime = 0;
-    window.hrirSampleRate = 48000;
-    window.hrirIrCache = {};
-
-    window.hrirInit = async function () {
-      if (window.hrirAudioContext) return;
-
-      window.hrirAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-      const res = await fetch("StreamingAssets/Avg83_DH_Unity.json");
-      window.hrirTable = await res.json();
-
-      console.log("HRIR JS loaded:", window.hrirTable.entries.length);
-    };
-
-    window.HRIR_SetAzimuth = function (azimuth) {
-      window.hrirAzimuth = azimuth;
-    };
-
-    function nearestHrir(azimuth) {
-      if (!window.hrirTable) return null;
-
-      let best = null;
-      let bestDiff = Infinity;
-
-      for (const e of window.hrirTable.entries) {
-        let diff = Math.abs((((azimuth - e.azimuth + 540) % 360) - 180));
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          best = e;
-        }
-      }
-
-      return best;
-    }
-
-    window.hrirNextTime = 0;
-
-    window.HRIR_SendPcm = async function (pcm, channels) {
-      await window.hrirInit();
-
-      const ctx = window.hrirAudioContext;
-      if (ctx.state !== "running") {
-        await ctx.resume();
-      }
-
-      const monoLength = Math.floor(pcm.length / channels);
-      const buffer = ctx.createBuffer(1, monoLength, 48000);
-      const data = buffer.getChannelData(0);
-
-      for (let i = 0; i < monoLength; i++) {
-        let s = 0;
-        for (let c = 0; c < channels; c++) {
-          s += pcm[i * channels + c];
-        }
-        data[i] = s / channels;
-      }
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-
-      const now = ctx.currentTime;
-      if (window.hrirNextTime < now + 0.08) {
-        window.hrirNextTime = now + 0.08;
-      }
-
-      source.start(window.hrirNextTime);
-      window.hrirNextTime += monoLength / 48000;
-    };
 
     var buildUrl = "Build";
     var loaderUrl = buildUrl + "/plexanb.loader.js";
