@@ -1,294 +1,127 @@
 <!DOCTYPE html>
 <html lang="en-us">
-
-<head>
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <title>Plexa</title>
-  <link rel="shortcut icon" href="TemplateData/favicon.ico">
-  <link rel="stylesheet" href="TemplateData/style.css">
-</head>
-
-<body>
-  <div id="unity-container" class="unity-desktop">
-    <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
-    <div id="unity-loading-bar">
-      <div id="unity-logo"></div>
-      <div id="unity-progress-bar-empty">
-        <div id="unity-progress-bar-full"></div>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity Web Player | sep</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-logo-title-footer"></div>
+        <div id="unity-fullscreen-button"></div>
+        <div id="unity-build-title">sep</div>
       </div>
     </div>
-    <div id="unity-warning"> </div>
-    <div id="unity-footer">
-      <div id="unity-logo-title-footer"></div>
-      <div id="unity-fullscreen-button"></div>
-      <div id="unity-build-title">Plexa v17</div>
-    </div>
-  </div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
 
-  <script>
-    var canvas = document.querySelector("#unity-canvas");
-
-    function unityShowBanner(msg, type) {
-      var warningBanner = document.querySelector("#unity-warning");
-      function updateBannerVisibility() {
-        warningBanner.style.display =
-          warningBanner.children.length ? "block" : "none";
-      }
-
-      var div = document.createElement("div");
-      div.innerHTML = msg;
-      warningBanner.appendChild(div);
-
-      if (type == "error") {
-        div.style = "background: red; padding: 10px;";
-      } else {
-        if (type == "warning") {
-          div.style = "background: yellow; padding: 10px;";
+      // Shows a temporary message banner/ribbon for a few seconds, or
+      // a permanent error message on top of the canvas if type=='error'.
+      // If type=='warning', a yellow highlight color is used.
+      // Modify or remove this function to customize the visually presented
+      // way that non-critical warnings and error messages are presented to the
+      // user.
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
-        setTimeout(function () {
-          warningBanner.removeChild(div);
-          updateBannerVisibility();
-        }, 5000);
-      }
-
-      updateBannerVisibility();
-    }
-
-    // ================================
-    // HRIR / WebAudio bridge
-    // ================================
-
-    window.hrirAudioContext = null;
-    window.hrirNextTime = 0;
-    window.currentAzimuth = 0;
-    window.hrirVolume = 0;
-    window.hrirLowPassFrequency = 22000;
-    window.hrirTable = null;
-    window.hrirIrCache = {};
-
-    window.hrirInit = async function () {
-      if (window.hrirAudioContext) {
-        return;
-      }
-
-      window.hrirAudioContext =
-        new (window.AudioContext || window.webkitAudioContext)();
-
-      const res = await fetch("StreamingAssets/Avg83_DH_Unity.json");
-      window.hrirTable = await res.json();
-
-      console.log("HRIR AudioContext initialized");
-      console.log("HRIR JS loaded:", window.hrirTable.entries.length);
-    };
-
-    window.HRIR_SetAzimuth = function (azimuth) {
-      window.currentAzimuth = azimuth;
-      console.log("JS HRIR_SetAzimuth:", azimuth);
-    };
-
-    window.HRIR_SetVolume = function (volume) {
-      window.hrirVolume = volume;
-    };
-
-    window.HRIR_SetLowPass = function (frequency) {
-      window.hrirLowPassFrequency = frequency;
-    };
-
-    function nearestHrir(azimuth) {
-      if (!window.hrirTable) {
-        return null;
-      }
-
-      let best = null;
-      let bestDiff = Infinity;
-
-      for (const e of window.hrirTable.entries) {
-        const diff = Math.abs(((azimuth - e.azimuth + 540) % 360) - 180);
-
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          best = e;
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
         }
+        updateBannerVisibility();
       }
 
-      return best;
-    }
-
-    function getCachedIr(ctx, hrir) {
-
-      const contextRate = ctx.sampleRate;
-
-      const key =
-        String(hrir.azimuth) +
-        "_" +
-        contextRate;
-
-      if (window.hrirIrCache[key]) {
-        return window.hrirIrCache[key];
-      }
-
-      const leftIR =
-        ctx.createBuffer(
-          1,
-          hrir.left.length,
-          contextRate
-        );
-
-      const rightIR =
-        ctx.createBuffer(
-          1,
-          hrir.right.length,
-          contextRate
-        );
-
-      leftIR.getChannelData(0).set(hrir.left);
-      rightIR.getChannelData(0).set(hrir.right);
-
-      window.hrirIrCache[key] = {
-        left: leftIR,
-        right: rightIR
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/plexanb.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/plexanb.data",
+        frameworkUrl: buildUrl + "/plexanb.framework.js",
+        codeUrl: buildUrl + "/plexanb.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "ichicawa",
+        productName: "sep",
+        productVersion: "1.0",
+        showBanner: unityShowBanner,
       };
 
-      return window.hrirIrCache[key];
-    }
+      // By default, Unity keeps WebGL canvas render target size matched with
+      // the DOM size of the canvas element (scaled by window.devicePixelRatio)
+      // Set this to false if you want to decouple this synchronization from
+      // happening inside the engine, and you would instead like to size up
+      // the canvas DOM size and WebGL render target sizes yourself.
+      // config.matchWebGLToCanvasSize = false;
 
-    window.HRIR_SendPcm = async function (pcm, channels, sampleRate) {
-      if (window.hrirVolume <= 0.0001) {
-        return;
+      // If you would like all file writes inside Unity Application.persistentDataPath
+      // directory to automatically persist so that the contents are remembered when
+      // the user revisits the site the next time, uncomment the following line:
+      // config.autoSyncPersistentDataPath = true;
+      // This autosyncing is currently not the default behavior to avoid regressing
+      // existing user projects that might rely on the earlier manual
+      // JS_FileSystem_Sync() behavior, but in future Unity version, this will be
+      // expected to change.
+
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
+
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
+
+        // To lower canvas resolution on mobile devices to gain some
+        // performance, uncomment the following line:
+        // config.devicePixelRatio = 1;
+
+
+      } else {
+        // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
       }
 
-      await window.hrirInit();
+      document.querySelector("#unity-loading-bar").style.display = "block";
 
-      const ctx = window.hrirAudioContext;
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+              }).then((unityInstance) => {
+                document.querySelector("#unity-loading-bar").style.display = "none";
+                document.querySelector("#unity-fullscreen-button").onclick = () => {
+                  unityInstance.SetFullscreen(1);
+                };
 
-      if (ctx.state !== "running") {
-        await ctx.resume();
-      }
+              }).catch((message) => {
+                alert(message);
+              });
+            };
 
-      const hrir = nearestHrir(window.currentAzimuth);
-      if (!hrir) {
-        return;
-      }
+      document.body.appendChild(script);
 
-      console.log(
-        "JS selected HRIR:",
-        "currentAzimuth=", window.currentAzimuth,
-        "nearest=", hrir.azimuth
-      );
-
-      const monoLength = Math.floor(pcm.length / channels);
-      const buffer = ctx.createBuffer(1, monoLength, sampleRate);
-      const data = buffer.getChannelData(0);
-
-      for (let i = 0; i < monoLength; i++) {
-        let sum = 0;
-
-        for (let c = 0; c < channels; c++) {
-          sum += pcm[i * channels + c];
-        }
-
-        data[i] = sum / channels;
-      }
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-
-      const lowpass = ctx.createBiquadFilter();
-      lowpass.type = "lowpass";
-      lowpass.frequency.value = window.hrirLowPassFrequency;
-
-      const ir = getCachedIr(ctx, hrir);
-
-      const leftConv = ctx.createConvolver();
-      const rightConv = ctx.createConvolver();
-
-      leftConv.buffer = ir.left;
-      rightConv.buffer = ir.right;
-
-      const merger = ctx.createChannelMerger(2);
-
-      const gain = ctx.createGain();
-      gain.gain.value = window.hrirVolume;
-
-      source.connect(lowpass);
-
-      lowpass.connect(leftConv);
-      lowpass.connect(rightConv);
-
-      leftConv.connect(merger, 0, 0);
-      rightConv.connect(merger, 0, 1);
-
-      merger.connect(gain);
-      gain.connect(ctx.destination);
-
-      const now = ctx.currentTime;
-
-      if (window.hrirNextTime < now + 0.15) {
-        window.hrirNextTime = now + 0.15;
-      }
-
-      source.start(window.hrirNextTime);
-      window.hrirNextTime += monoLength / sampleRate;
-    };
-
-    // ================================
-    // Unity
-    // ================================
-
-    var buildUrl = "Build";
-    var loaderUrl = buildUrl + "/plexanb.loader.js";
-
-    var config = {
-      arguments: [],
-      dataUrl: buildUrl + "/plexanb.data",
-      frameworkUrl: buildUrl + "/plexanb.framework.js",
-      codeUrl: buildUrl + "/plexanb.wasm",
-      streamingAssetsUrl: "StreamingAssets",
-      companyName: "ichicawa",
-      productName: "sep",
-      productVersion: "1.0",
-      showBanner: unityShowBanner,
-    };
-
-    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-      var meta = document.createElement("meta");
-      meta.name = "viewport";
-      meta.content =
-        "width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes";
-
-      document.getElementsByTagName("head")[0].appendChild(meta);
-
-      document.querySelector("#unity-container").className = "unity-mobile";
-      canvas.className = "unity-mobile";
-    } else {
-      canvas.style.width = "960px";
-      canvas.style.height = "600px";
-    }
-
-    document.querySelector("#unity-loading-bar").style.display = "block";
-
-    var script = document.createElement("script");
-    script.src = loaderUrl;
-
-    script.onload = () => {
-      createUnityInstance(canvas, config, (progress) => {
-        document.querySelector("#unity-progress-bar-full").style.width =
-          100 * progress + "%";
-      }).then((unityInstance) => {
-        document.querySelector("#unity-loading-bar").style.display = "none";
-
-        document.querySelector("#unity-fullscreen-button").onclick = () => {
-          unityInstance.SetFullscreen(1);
-        };
-
-      }).catch((message) => {
-        alert(message);
-      });
-    };
-
-    document.body.appendChild(script);
-  </script>
-</body>
-
+    </script>
+  </body>
 </html>
